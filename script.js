@@ -1,131 +1,86 @@
-document.addEventListener('DOMContentLoaded', () => {
-    
-    // --- Navbar Scroll Effect ---
-    const navbar = document.getElementById('navbar');
-    window.addEventListener('scroll', () => {
-        if (window.scrollY > 20) {
-            navbar.classList.add('scrolled');
-        } else {
-            navbar.classList.remove('scrolled');
-        }
-    });
+const $ = (s) => document.querySelector(s);
+const modal = $('#uploadModal');
+const form = $('#uploadForm');
 
-    // --- Mobile Menu Toggle ---
-    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-    const mobileMenu = document.getElementById('mobileMenu');
-    
-    mobileMenuBtn.addEventListener('click', () => {
-        mobileMenu.classList.toggle('hidden');
-    });
+function toast(message, ok=true) {
+  const el=document.createElement('div');
+  el.className=`toast ${ok?'toast-ok':'toast-error'}`;
+  el.innerHTML=`<i class="fa-solid ${ok?'fa-circle-check':'fa-circle-exclamation'}"></i><span>${escapeHtml(message)}</span>`;
+  $('#toastContainer').appendChild(el);
+  setTimeout(()=>el.remove(),4500);
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+function openModal(){modal.classList.remove('hidden'); requestAnimationFrame(()=>modal.classList.add('show'));}
+function closeModal(){modal.classList.remove('show');setTimeout(()=>modal.classList.add('hidden'),200);}
+$('#openUploadBtn').addEventListener('click',openModal);
+$('#closeModalBtn').addEventListener('click',closeModal);
+$('#cancelUploadBtn').addEventListener('click',closeModal);
+$('#modalBackdrop').addEventListener('click',closeModal);
+$('#mobileMenuBtn').addEventListener('click',()=>$('#mobileMenu').classList.toggle('hidden'));
+document.querySelectorAll('.mobile-link').forEach(a=>a.addEventListener('click',()=>$('#mobileMenu').classList.add('hidden')));
 
-    // Close mobile menu when a link is clicked
-    const mobileLinks = mobileMenu.querySelectorAll('a');
-    mobileLinks.forEach(link => {
-        link.addEventListener('click', () => {
-            mobileMenu.classList.add('hidden');
-        });
-    });
+document.querySelectorAll('input[name="mediaType"]').forEach(r=>r.addEventListener('change',()=>{
+  $('#mediaFile').accept=r.value==='music'?'audio/*':'video/*';
+}));
 
-    // --- Modal Logic ---
-    const uploadModal = document.getElementById('uploadModal');
-    const modalContent = document.getElementById('modalContent');
-    const openUploadBtn = document.getElementById('openUploadBtn');
-    const closeModalBtn = document.getElementById('closeModalBtn');
-    const cancelUploadBtn = document.getElementById('cancelUploadBtn');
-    const modalBackdrop = document.getElementById('modalBackdrop');
-    
-    function openModal() {
-        uploadModal.classList.remove('hidden');
-        // Small delay to allow display block to apply before animating opacity
-        setTimeout(() => {
-            uploadModal.classList.remove('opacity-0');
-            modalContent.classList.remove('scale-95');
-            modalContent.classList.add('scale-100');
-        }, 10);
+form.addEventListener('submit',(e)=>{
+  e.preventDefault();
+  const fd=new FormData(form);
+  fd.append('action','upload');
+  const xhr=new XMLHttpRequest();
+  xhr.open('POST','api.php?action=upload');
+  $('#uploadProgressWrap').classList.remove('hidden');
+  xhr.upload.onprogress=(ev)=>{
+    if(ev.lengthComputable){
+      const pct=Math.round(ev.loaded/ev.total*100);
+      $('#uploadProgress').style.width=pct+'%';
+      $('#uploadStatus').textContent=`Uploading… ${pct}%`;
     }
-
-    function closeModal() {
-        uploadModal.classList.add('opacity-0');
-        modalContent.classList.remove('scale-100');
-        modalContent.classList.add('scale-95');
-        // Wait for animation to finish before hiding
-        setTimeout(() => {
-            uploadModal.classList.add('hidden');
-        }, 300);
-    }
-
-    openUploadBtn.addEventListener('click', openModal);
-    closeModalBtn.addEventListener('click', closeModal);
-    cancelUploadBtn.addEventListener('click', closeModal);
-    modalBackdrop.addEventListener('click', closeModal);
-
-
-    // --- Custom Toast Notifications System ---
-    const toastContainer = document.getElementById('toastContainer');
-
-    function showToast(message, type = 'success') {
-        const toast = document.createElement('div');
-        
-        // Setup Icon and Colors based on type
-        let iconClass = 'fa-check-circle text-green-400';
-        let borderClass = 'border-green-500/50';
-        
-        if (type === 'error') {
-            iconClass = 'fa-circle-exclamation text-red-400';
-            borderClass = 'border-red-500/50';
-        }
-
-        toast.className = `flex items-center gap-3 bg-dark-800 border ${borderClass} shadow-xl shadow-black/50 text-white px-5 py-3 rounded-lg transform translate-x-full transition-transform duration-300 ease-out`;
-        
-        toast.innerHTML = `
-            <i class="fa-solid ${iconClass} text-xl"></i>
-            <span class="font-medium text-sm">${message}</span>
-        `;
-        
-        toastContainer.appendChild(toast);
-        
-        // Animate in
-        requestAnimationFrame(() => {
-            toast.classList.remove('translate-x-full');
-            toast.classList.add('translate-x-0');
-        });
-
-        // Remove after 3.5 seconds
-        setTimeout(() => {
-            toast.classList.remove('translate-x-0');
-            toast.classList.add('translate-x-full');
-            
-            // Wait for slide out animation before removing element
-            setTimeout(() => {
-                toast.remove();
-            }, 300);
-        }, 3500);
-    }
-
-    // --- Form Submissions ---
-    
-    // Upload Form
-    const uploadForm = document.getElementById('uploadForm');
-    uploadForm.addEventListener('submit', (e) => {
-        e.preventDefault(); 
-        
-        // Simulating upload process...
-        closeModal();
-        showToast('Media uploaded successfully to VibeStream!', 'success');
-        
-        // Reset form
-        uploadForm.reset();
-    });
-
-    // Contact Form
-    const contactForm = document.getElementById('contactForm');
-    contactForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        
-        // Show custom toast instead of native alert
-        showToast('Message sent! Our Solwezi team will respond shortly.', 'success');
-        
-        // Reset form
-        contactForm.reset();
-    });
+  };
+  xhr.onload=()=>{
+    try {
+      const res=JSON.parse(xhr.responseText);
+      if(!res.success) throw new Error(res.message);
+      addCard(res.data.item);
+      toast(res.message,true);
+      form.reset();
+      $('#uploadProgressWrap').classList.add('hidden');
+      closeModal();
+      updateCounts();
+    } catch(err){ toast(err.message || 'Upload failed.',false); $('#uploadStatus').textContent='Upload failed.'; }
+  };
+  xhr.onerror=()=>toast('Network/server error during upload.',false);
+  xhr.send(fd);
 });
+
+$('#contactForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const fd=new FormData();
+  fd.append('action','contact'); fd.append('name',$('#name').value); fd.append('email',$('#email').value); fd.append('message',$('#message').value);
+  try{
+    const r=await fetch('api.php?action=contact',{method:'POST',body:fd}); const j=await r.json();
+    if(!j.success) throw new Error(j.message); toast(j.message); e.target.reset();
+  }catch(err){toast(err.message||'Could not send message.',false);}
+});
+
+function addCard(item){
+  const type=item.type;
+  const grid=type==='music'?$('#musicGrid'):$('#videoGrid');
+  const empty=type==='music'?$('#musicEmpty'):$('#videoEmpty');
+  empty.classList.add('hidden');
+  const article=document.createElement('article'); article.className='media-card';
+  const title=escapeHtml(item.title), artist=escapeHtml(item.artist||'Galaxy Stream');
+  if(type==='music'){
+    const art=item.cover_url?`<img src="${escapeHtml(item.cover_url)}" class="media-cover" alt="">`:`<div class="media-cover cover-fallback"><i class="fa-solid fa-music"></i></div>`;
+    article.innerHTML=`<div>${art}</div><div class="p-5"><h3 class="font-bold text-lg truncate">${title}</h3><p class="text-sm text-gray-400 mb-4">${artist} • Just now</p><audio controls preload="metadata" class="w-full"><source src="${escapeHtml(item.file_url)}"></audio><a class="download-link" href="${escapeHtml(item.file_url)}" download><i class="fa-solid fa-download"></i> Download</a></div>`;
+    grid.prepend(article);
+  } else {
+    const poster=item.cover_url?` poster="${escapeHtml(item.cover_url)}"`:'';
+    article.innerHTML=`<div class="video-wrap"><video controls preload="metadata"${poster}><source src="${escapeHtml(item.file_url)}"></video></div><div class="p-5"><h3 class="font-bold text-lg">${title}</h3><p class="text-sm text-gray-400">${artist} • Just now</p><a class="download-link" href="${escapeHtml(item.file_url)}" download><i class="fa-solid fa-download"></i> Download</a></div>`;
+    grid.prepend(article);
+  }
+}
+function updateCounts(){
+  $('#musicCount').textContent=`${$('#musicGrid').children.length} tracks`;
+  $('#videoCount').textContent=`${$('#videoGrid').children.length} videos`;
+}
